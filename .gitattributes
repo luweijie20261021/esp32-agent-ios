@@ -1,0 +1,12 @@
+# Auto-handle line endings for text files
+* text=auto
+
+# Ensure shell scripts keep LF even on Windows
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Ensure PowerShell scripts can be CRLF on Windows
+*.ps1 text eol=crlf
+*.bat text eol=crlf

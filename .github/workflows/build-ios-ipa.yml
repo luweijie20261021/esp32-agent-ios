@@ -1,0 +1,70 @@
+name: Build iOS IPA
+
+on:
+  # Allow manual trigger from GitHub web UI
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Create CI Local.xcconfig
+        # Unsigned build for sideloading. Capabilities that need a paid account
+        # (App Groups / Hotspot Configuration) are disabled here; Sideloadly will
+        # re-sign with the user's free Apple ID on Windows.
+        run: |
+          cat > Config/Local.xcconfig <<'EOF'
+          // CI build: no development team, placeholder bundle ID.
+          DEVELOPMENT_TEAM =
+          IA_BUNDLE_ID = com.esp32agent.opensource
+          // Disable entitlements that require paid capabilities.
+          IA_ENTITLEMENTS =
+          IA_WIDGET_ENTITLEMENTS =
+          EOF
+
+      - name: Build unsigned .app for device
+        run: |
+          xcodebuild -project IPhoneAgent.xcodeproj \
+            -scheme IPhoneAgent \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath ../build-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            build
+
+      - name: Package IPA
+        run: |
+          APP_PATH=$(find ../build-derived/Build/Products/Release-iphoneos -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found in build products"
+            exit 1
+          fi
+          echo "Found app: $APP_PATH"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r IPhoneAgent-unsigned.ipa Payload
+          ls -lh IPhoneAgent-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPhoneAgent-unsigned-ipa
+          path: ios/IPhoneAgent-unsigned.ipa
+          if-no-files-found: error
