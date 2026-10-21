@@ -6,6 +6,8 @@
     Sideloadly is used to install the unsigned IPhoneAgent.ipa onto an iPhone
     from Windows without a Mac. This script downloads the official installer and
     runs it. Administrator rights are required for installation.
+
+    On a slow network, use -Resume to keep retrying until the download finishes.
 #>
 [CmdletBinding()]
 param(
@@ -16,13 +18,30 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$DownloadUrl = "https://sideloadly.io/SideloadlySetup32.exe"
-$InstallerName = "SideloadlySetup32.exe"
+$Is64Bit = [Environment]::Is64BitOperatingSystem
+if ($Is64Bit) {
+    $DownloadUrl = "https://sideloadly.io/SideloadlySetup64.exe"
+    $InstallerName = "SideloadlySetup64.exe"
+} else {
+    $DownloadUrl = "https://sideloadly.io/SideloadlySetup32.exe"
+    $InstallerName = "SideloadlySetup32.exe"
+}
+
 $TempDir = "$env:TEMP\sideloadly-install"
 $InstallerPath = "$TempDir\$InstallerName"
 
 function Test-Admin {
     return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-RemoteFileSize {
+    param([string]$Url)
+    try {
+        $resp = Invoke-WebRequest -Uri $Url -Method HEAD -UseBasicParsing -TimeoutSec 15
+        $len = $resp.Headers['Content-Length']
+        if ($len) { return [long]$len }
+    } catch {}
+    return $null
 }
 
 if (-not (Test-Path $TempDir)) {
@@ -33,21 +52,34 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Sideloadly downloader / installer" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Download
-if (Test-Path $InstallerPath) {
-    $existing = Get-Item $InstallerPath
-    # If file is tiny it is probably a partial/corrupt download from a previous slow attempt.
-    if ($existing.Length -lt 10MB) {
-        Write-Warning "Existing installer looks partial ($($existing.Length) bytes). Removing and re-downloading..."
-        Remove-Item $InstallerPath -Force
-    } else {
-        Write-Host "Installer already exists: $InstallerPath ($([math]::Round($existing.Length/1MB,2)) MB)" -ForegroundColor Green
-    }
+# Determine expected size
+$ExpectedSize = Get-RemoteFileSize $DownloadUrl
+if ($ExpectedSize) {
+    Write-Host "Installer size: $([math]::Round($ExpectedSize/1MB,2)) MB" -ForegroundColor DarkGray
 }
 
-if (-not (Test-Path $InstallerPath)) {
+# Check existing file
+$CurrentSize = 0
+if (Test-Path $InstallerPath) {
+    $CurrentSize = (Get-Item $InstallerPath).Length
+    Write-Host "Existing file: $InstallerPath ($([math]::Round($CurrentSize/1MB,2)) MB)" -ForegroundColor Yellow
+}
+
+$NeedDownload = $true
+if ($ExpectedSize -and $CurrentSize -ge $ExpectedSize) {
+    $NeedDownload = $false
+    Write-Host "Installer already complete." -ForegroundColor Green
+}
+
+if ($NeedDownload) {
+    if (-not $Resume -and $CurrentSize -gt 0) {
+        Write-Warning "Partial download exists. Use -Resume to continue, or delete $InstallerPath and rerun."
+        exit 1
+    }
+
     Write-Host "Downloading Sideloadly from $DownloadUrl ..." -ForegroundColor Cyan
-    Write-Host "File size is ~120 MB. On a slow connection this can take a while." -ForegroundColor DarkGray
+    Write-Host "On a slow connection this can take a long time. Leave this window open." -ForegroundColor DarkGray
+
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($curl) {
         do {
@@ -63,7 +95,13 @@ if (-not (Test-Path $InstallerPath)) {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
     }
-    Write-Host "Download complete." -ForegroundColor Green
+
+    # Verify
+    $FinalSize = (Get-Item $InstallerPath).Length
+    if ($ExpectedSize -and $FinalSize -lt $ExpectedSize) {
+        throw "Download incomplete: $FinalSize / $ExpectedSize bytes. Use -Resume to continue."
+    }
+    Write-Host "Download complete ($([math]::Round($FinalSize/1MB,2)) MB)." -ForegroundColor Green
 }
 
 if ($NoInstall) {
