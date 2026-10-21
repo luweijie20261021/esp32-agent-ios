@@ -9,7 +9,8 @@ on:
 
 jobs:
   build-ipa:
-    runs-on: macos-latest
+    # macOS 15 provides Xcode 16 needed for iOS 18 deployment target.
+    runs-on: macos-15
     defaults:
       run:
         working-directory: ios
