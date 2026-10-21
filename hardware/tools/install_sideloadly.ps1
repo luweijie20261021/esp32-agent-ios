@@ -10,7 +10,8 @@
 [CmdletBinding()]
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\Sideloadly",
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [switch]$Resume
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,13 +35,30 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 # Download
 if (Test-Path $InstallerPath) {
-    Write-Host "Installer already exists: $InstallerPath" -ForegroundColor Green
-} else {
+    $existing = Get-Item $InstallerPath
+    # If file is tiny it is probably a partial/corrupt download from a previous slow attempt.
+    if ($existing.Length -lt 10MB) {
+        Write-Warning "Existing installer looks partial ($($existing.Length) bytes). Removing and re-downloading..."
+        Remove-Item $InstallerPath -Force
+    } else {
+        Write-Host "Installer already exists: $InstallerPath ($([math]::Round($existing.Length/1MB,2)) MB)" -ForegroundColor Green
+    }
+}
+
+if (-not (Test-Path $InstallerPath)) {
     Write-Host "Downloading Sideloadly from $DownloadUrl ..." -ForegroundColor Cyan
+    Write-Host "File size is ~120 MB. On a slow connection this can take a while." -ForegroundColor DarkGray
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($curl) {
-        & curl.exe -C - -L --fail --ssl-no-revoke -o $InstallerPath $DownloadUrl
-        if ($LASTEXITCODE -ne 0) { throw "curl download failed with exit code $LASTEXITCODE" }
+        do {
+            & curl.exe -C - -L --fail --ssl-no-revoke -o $InstallerPath $DownloadUrl
+            $exit = $LASTEXITCODE
+            if ($exit -ne 0) {
+                Write-Warning "curl returned $exit. Will retry in 5 seconds..."
+                Start-Sleep -Seconds 5
+            }
+        } while ($Resume -and $exit -ne 0)
+        if ($exit -ne 0) { throw "curl download failed with exit code $exit" }
     } else {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
