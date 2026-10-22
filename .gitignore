@@ -29,3 +29,8 @@ hardware/setup_and_flash_log_*.txt
 # IDE / agent terminals
 .cursor/
 terminals/
+
+# Downloaded iOS artifacts
+*.ipa
+*.ipa.zip
+IPhoneAgent-unsigned*
