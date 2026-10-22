@@ -43,10 +43,20 @@ Please run install_sideloadly.ps1 first, or download it manually from https://si
 Write-Host "Found Sideloadly: $Sideloadly" -ForegroundColor Green
 
 # 2. Find IPA if not provided
+# Resolve project root: this script lives in hardware/tools, so project root is two levels up.
+$ToolsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$HardwareRoot = Split-Path -Parent $ToolsRoot
+$ProjectRoot = Split-Path -Parent $HardwareRoot
+
 if (-not $IpaPath) {
-    $Candidates = @()
-    $Candidates += Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "IPhoneAgent*.ipa" -ErrorAction SilentlyContinue
-    $Candidates += Get-ChildItem -Path "." -Filter "IPhoneAgent*.ipa" -ErrorAction SilentlyContinue
+    $SearchPaths = @(
+        $ProjectRoot
+        "$env:USERPROFILE\Downloads"
+        "."
+    )
+    $Candidates = foreach ($sp in $SearchPaths) {
+        Get-ChildItem -Path $sp -Filter "IPhoneAgent*.ipa" -ErrorAction SilentlyContinue
+    }
     $Latest = $Candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($Latest) { $IpaPath = $Latest.FullName }
 }
