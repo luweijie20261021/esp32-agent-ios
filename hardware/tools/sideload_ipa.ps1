@@ -29,6 +29,7 @@ $SideloadlyPaths = @(
     "${env:ProgramFiles}\Sideloadly\Sideloadly.exe"
     "${env:ProgramFiles(x86)}\Sideloadly\Sideloadly.exe"
     "$env:LOCALAPPDATA\Programs\Sideloadly\Sideloadly.exe"
+    "$env:LOCALAPPDATA\Sideloadly\sideloadly.exe"
 )
 $Sideloadly = $SideloadlyPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 

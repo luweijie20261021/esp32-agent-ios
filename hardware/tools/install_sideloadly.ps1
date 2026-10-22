@@ -30,6 +30,13 @@ if ($Is64Bit) {
 $TempDir = "$env:TEMP\sideloadly-install"
 $InstallerPath = "$TempDir\$InstallerName"
 
+$SideloadlyPaths = @(
+    "${env:ProgramFiles}\Sideloadly\Sideloadly.exe"
+    "${env:ProgramFiles(x86)}\Sideloadly\Sideloadly.exe"
+    "$env:LOCALAPPDATA\Programs\Sideloadly\Sideloadly.exe"
+    "$env:LOCALAPPDATA\Sideloadly\sideloadly.exe"
+)
+
 function Test-Admin {
     return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -51,6 +58,14 @@ if (-not (Test-Path $TempDir)) {
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Sideloadly downloader / installer" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+
+$ExistingSideloadly = $SideloadlyPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($ExistingSideloadly) {
+    Write-Host "Sideloadly already installed at: $ExistingSideloadly" -ForegroundColor Green
+    if (-not $NoInstall) {
+        Write-Host "No need to reinstall. Run sideload_ipa.ps1 to sideload your IPA." -ForegroundColor Cyan
+    }
+}
 
 # Determine expected size
 $ExpectedSize = Get-RemoteFileSize $DownloadUrl
